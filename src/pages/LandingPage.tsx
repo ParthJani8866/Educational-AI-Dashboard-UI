@@ -1,6 +1,6 @@
 import { useGoogleLogin, googleLogout } from "@react-oauth/google";
 import { useNavigate } from "react-router-dom";
-import { GraduationCap, ArrowRight, Sparkles } from "lucide-react";
+import { GraduationCap, ArrowRight, Sparkles, Currency } from "lucide-react";
 import FeaturesSection from "../components/FeaturesSection";
 import PricingSection from "../components/PricingSection";
 import { useState } from "react";
@@ -11,156 +11,211 @@ interface User {
   picture?: string;
 }
 
-interface LandingPageProps {
-  user: User | null;
-  setUser: (user: User | null) => void;
-}
-
 export default function LandingPage() {
   const [user, setUser] = useState<User | null>(null);
+  const [isPaying, setIsPaying] = useState(false);
+  const [pendingSubscribe, setPendingSubscribe] = useState(false);
 
   const navigate = useNavigate();
 
   // --------------------
-  // Google Login with useGoogleLogin
+  // Google Login
   // --------------------
   const login = useGoogleLogin({
     flow: "implicit",
     onSuccess: async (tokenResponse: any) => {
-      try {
-        const res = await fetch("https://www.googleapis.com/oauth2/v3/userinfo", {
+      const res = await fetch(
+        "https://www.googleapis.com/oauth2/v3/userinfo",
+        {
           headers: {
             Authorization: `Bearer ${tokenResponse.access_token}`,
           },
-        });
-        const profile = await res.json();
-        console.log("Google profile:", profile);
+        }
+      );
 
-        const userData: User = {
-          name: profile.name,
-          email: profile.email,
-          picture: profile.picture,
-        };
-        setUser(userData);
-        saveUserToBackend(userData);
-        // Permanent redirect to dashboard
-        navigate("/dashboard", { state: { user: userData }, replace: true });
-      } catch (err) {
-        console.error("Failed to fetch Google user info", err);
+      const profile = await res.json();
+
+      const userData: User = {
+        name: profile.name,
+        email: profile.email,
+        picture: profile.picture,
+      };
+
+      setUser(userData);
+      localStorage.setItem("kg_user", JSON.stringify(userData));
+      await saveUserToBackend(userData);
+
+      // Resume payment if user clicked Subscribe first
+      if (pendingSubscribe) {
+        setPendingSubscribe(false);
+        handleSubscribe(userData);
+      } else {
+        navigate("/dashboard", { replace: true });
       }
     },
-    onError: () => alert("Login Failed"),
+    onError: () => alert("Google Login Failed"),
   });
+
+  // --------------------
+  // Save user
+  // --------------------
   const saveUserToBackend = async (user: User) => {
-    const res = await fetch("http://127.0.0.1:8010/auth/google-login", {
+    await fetch("https://api.kalpgyanai.com/auth/google-login", {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify(user),
     });
+  };
 
-    if (!res.ok) {
-      throw new Error("Failed to save user");
+  // --------------------
+  // Subscribe click
+  // --------------------
+  const handleSubscribeClick = () => {
+    if (!user) {
+      setPendingSubscribe(true);
+      login();
+      return;
     }
-
-    return res.json();
-  };
-  // --------------------
-  // Guest / Get Started
-  // --------------------
-  const handleGetStarted = () => {
-    setUser({ name: "Guest", email: "" });
-    navigate("/dashboard", { replace: true });
+    handleSubscribe(user);
   };
 
   // --------------------
-  // Logout
+  // Razorpay
   // --------------------
-  const handleLogout = () => {
-    googleLogout();
-    setUser(null);
-    navigate("/", { replace: true });
+  const handleSubscribe = async (loggedInUser: User) => {
+    try {
+      setIsPaying(true);
+
+      const res = await fetch(
+        "https://api.kalpgyanai.com/payment/create-order",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ amount: 489, currency: "INR", receipt: loggedInUser.email }),
+        }
+      );
+
+      const order = await res.json();
+      console.log(order, loggedInUser);
+      const options = {
+        key: "rzp_live_S9EGe1u7e9IGgD",
+        amount: order.amount,
+        currency: "INR",
+        name: "KalpGyanAI",
+        description: "UPSC Premium Subscription",
+        order_id: order.order_id,
+        prefill: {
+          name: loggedInUser.name,
+          email: loggedInUser.email,
+        },
+        handler: () => {
+          if (window.gtag) {
+            window.gtag('event', 'conversion', {
+              send_to: 'AW-693333660/X-FUCMnj15IbEJzdzcoC',
+              value: 1.0,
+              currency: 'USD',
+            });
+          }
+          navigate("/dashboard", { replace: true });
+          setIsPaying(false);
+        },
+        modal: {
+          ondismiss: () => { console.log("SUCCESS1"); setIsPaying(false) },
+        },
+        theme: { color: "#4f46e5" },
+      };
+      const Razorpay = (window as any).Razorpay;
+      const razorpay = new Razorpay(options);
+      razorpay.open();
+    } catch {
+      setIsPaying(false);
+      alert("Payment failed");
+    }
   };
 
   // --------------------
-  // If user logged in, redirect handled via React Router, no need to render here
+  // UI
   // --------------------
-
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100">
-      {/* Navigation */}
+      {/* NAVBAR */}
       <nav className="bg-white border-b border-slate-200 shadow-sm sticky top-0 z-50">
         <div className="container mx-auto px-4 py-4 max-w-7xl flex justify-between items-center">
           <div className="flex items-center gap-3">
-            <div className="bg-gradient-to-br from-indigo-600 to-purple-600 p-2 rounded-lg">
+            <div className="bg-indigo-600 p-2 rounded-lg">
               <GraduationCap className="size-6 text-white" />
             </div>
             <div>
-              <h1 className="font-bold text-slate-900">KalpGyanAI</h1>
+              <h1 className="font-bold">KalpGyanAI</h1>
               <p className="text-xs text-slate-600">UPSC Excellence</p>
             </div>
           </div>
 
-          <div className="flex items-center gap-3">
-            <button
-              onClick={() => login()} // trigger Google login
-              className="px-6 py-2 bg-indigo-600 text-white rounded-lg font-semibold hover:bg-indigo-700 transition-colors shadow-sm"
-            >
-              Get Started
-            </button>
-          </div>
+          <button
+            onClick={handleSubscribeClick}
+            className="px-6 py-2 bg-indigo-600 text-white rounded-lg font-semibold"
+          >
+            Get Started
+          </button>
         </div>
       </nav>
 
-      {/* Hero Section */}
-      <section className="container mx-auto px-4 py-16 max-w-7xl text-center">
-        <div className="max-w-4xl mx-auto">
-          <div className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-50 text-indigo-700 rounded-full text-sm font-medium mb-6">
-            <Sparkles className="size-4" />
-            <span>India's First AI-Powered UPSC Platform</span>
-          </div>
+      {/* HERO */}
+      <section className="container mx-auto px-4 py-20 max-w-7xl text-center" style={{ paddingBottom: "10px", paddingTop: "20px" }}>
+        {/* Badge */}
+        <div className="inline-flex items-center gap-2 px-4 py-2 mb-6 rounded-full bg-indigo-50 text-indigo-700 text-sm font-semibold shadow-sm">
+          <Sparkles className="size-4" />
+          <span>India’s First AI-Powered UPSC Learning Platform</span>
+        </div>
 
-          <h1 className="text-slate-900 mb-6 text-4xl md:text-5xl font-bold">
-            Master UPSC CSE with <br />
-            <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 to-purple-600">
-              AI-Driven Learning
-            </span>
-          </h1>
+        {/* Heading */}
+        <h1 className="text-4xl md:text-6xl font-extrabold leading-tight mb-6 text-slate-900">
+          Crack UPSC Smarter with{" "}
+          <span className="bg-clip-text bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600">
+            AI-Driven Preparation
+          </span>
+        </h1>
 
-          <p className="text-slate-600 mb-8 max-w-2xl mx-auto">
-            Experience personalized UPSC preparation with cutting-edge AI technology.
-            Get access to comprehensive study materials, intelligent practice, and expert guidance—all in one platform.
+        {/* Subheading */}
+        <p className="text-slate-600 text-lg md:text-xl max-w-3xl mx-auto mb-10" style={{ marginBottom: "12px" }}>
+          Get exam-ready with <strong>personalized syllabus breakdowns</strong>,
+          <strong> intelligent MCQs</strong>, <strong>PYQ analysis</strong> and a
+          <strong> 24×7 AI mentor</strong> trained specifically for UPSC CSE.
+        </p>
+
+        {/* CTA */}
+        <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+          <button
+            onClick={handleSubscribeClick}
+            className="    inline-flex items-center justify-center    gap-3    px-8 py-4    rounded-xl    bg-gradient-to-r from-indigo-600 to-purple-600    text-white text-base md:text-lg font-semibold    shadow-md    hover:shadow-xl hover:from-indigo-700 hover:to-purple-700    active:scale-[0.98]    focus:outline-none focus:ring-4 focus:ring-indigo-300    transition-all duration-200  "
+          >
+            Subscribe Now
+            <ArrowRight className="w-5 h-5" />
+          </button>
+
+          {/* Trust hint */}
+          <p className="text-sm text-slate-500">
+            ✔ Secure payments • ✔ Cancel anytime
           </p>
+        </div>
 
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-12">
-            <button
-              onClick={() => login()}
-              className="inline-flex items-center gap-2 px-8 py-4 bg-indigo-600 text-white rounded-lg font-semibold hover:bg-indigo-700 transition-all shadow-lg hover:shadow-xl hover:scale-105 transform"
-            >
-              Start Free Trial
-              <ArrowRight className="size-5" />
-            </button>
+        {/* Social Proof */}
+        <div className="mt-12 grid grid-cols-2 md:grid-cols-4 gap-6 max-w-4xl mx-auto">
+          <div className="bg-white rounded-xl p-4 border border-slate-200 shadow-sm">
+            <p className="text-2xl font-bold text-indigo-600">100K+</p>
+            <p className="text-sm text-slate-600">UPSC MCQs</p>
           </div>
-
-          {/* Trust Indicators */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-6 max-w-3xl mx-auto">
-            <div className="bg-white rounded-xl p-4 shadow-sm border border-slate-200">
-              <p className="font-bold text-indigo-600">100,000+</p>
-              <p className="text-sm text-slate-600">Practice MCQs</p>
-            </div>
-            <div className="bg-white rounded-xl p-4 shadow-sm border border-slate-200">
-              <p className="font-bold text-purple-600">500+</p>
-              <p className="text-sm text-slate-600">Free eBooks</p>
-            </div>
-            <div className="bg-white rounded-xl p-4 shadow-sm border border-slate-200">
-              <p className="font-bold text-blue-600">24/7</p>
-              <p className="text-sm text-slate-600">AI Mentor</p>
-            </div>
-            <div className="bg-white rounded-xl p-4 shadow-sm border border-slate-200">
-              <p className="font-bold text-green-600">10,000+</p>
-              <p className="text-sm text-slate-600">Happy Students</p>
-            </div>
+          <div className="bg-white rounded-xl p-4 border border-slate-200 shadow-sm">
+            <p className="text-2xl font-bold text-purple-600">24/7</p>
+            <p className="text-sm text-slate-600">AI Mentor</p>
+          </div>
+          <div className="bg-white rounded-xl p-4 border border-slate-200 shadow-sm">
+            <p className="text-2xl font-bold text-blue-600">GS I-IV</p>
+            <p className="text-sm text-slate-600">Full Coverage</p>
+          </div>
+          <div className="bg-white rounded-xl p-4 border border-slate-200 shadow-sm">
+            <p className="text-2xl font-bold text-green-600">PYQ-Driven</p>
+            <p className="text-sm text-slate-600">Smart Insights</p>
           </div>
         </div>
       </section>
@@ -168,51 +223,38 @@ export default function LandingPage() {
       <FeaturesSection />
       <PricingSection />
 
-      {/* Footer */}
+      {/* FOOTER */}
       <footer className="bg-slate-900 text-white py-12">
-        <div className="container mx-auto px-4 max-w-7xl">
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-8 mb-8">
-            <div className="col-span-1 md:col-span-2">
-              <div className="flex items-center gap-3 mb-4">
-                <div className="bg-gradient-to-br from-indigo-600 to-purple-600 p-2 rounded-lg">
-                  <GraduationCap className="size-6 text-white" />
-                </div>
-                <div>
-                  <h3 className="font-bold">KalpGyanAI</h3>
-                  <p className="text-xs text-slate-400">UPSC Excellence</p>
-                </div>
-              </div>
-              <p className="text-slate-400 text-sm max-w-md">
-                India's first AI-powered UPSC preparation platform. Master your civil services exam
-                with intelligent learning and comprehensive study materials.
-              </p>
-            </div>
-
-            <div>
-              <h4 className="font-semibold mb-3">Quick Links</h4>
-              <ul className="space-y-2 text-sm text-slate-400">
-                <li><a href="#" className="hover:text-white transition-colors">About Us</a></li>
-                <li><a href="#" className="hover:text-white transition-colors">Contact</a></li>
-                <li><a href="#" className="hover:text-white transition-colors">Blog</a></li>
-                <li><a href="#" className="hover:text-white transition-colors">Success Stories</a></li>
-              </ul>
-            </div>
-
-            <div>
-              <h4 className="font-semibold mb-3">Legal</h4>
-              <ul className="space-y-2 text-sm text-slate-400">
-                <li><a href="#" className="hover:text-white transition-colors">Privacy Policy</a></li>
-                <li><a href="#" className="hover:text-white transition-colors">Terms of Service</a></li>
-                <li><a href="#" className="hover:text-white transition-colors">Refund Policy</a></li>
-              </ul>
-            </div>
+        <div className="container mx-auto px-4 max-w-7xl grid grid-cols-1 md:grid-cols-4 gap-8">
+          <div>
+            <h3 className="font-bold mb-2">KalpGyanAI</h3>
+            <p className="text-slate-400 text-sm">
+              AI-powered UPSC preparation platform.
+            </p>
           </div>
-
-          <div className="border-t border-slate-800 pt-8 text-center text-sm text-slate-400">
-            <p>&copy; {new Date().getFullYear()} KalpGyanAI. All rights reserved.</p>
+          <div>
+            <h4 className="font-semibold mb-3">Legal</h4>
+            <ul className="text-slate-400 text-sm space-y-2">
+              <li><a href="/privacy">Privacy Policy</a></li>
+              <li><a href="/TC">Terms & Conditions</a></li>
+              <li><a href="/shipping">Shipping Policy</a></li>
+              <li><a href="/contact">Contact</a></li>
+            </ul>
           </div>
         </div>
       </footer>
+
+      {/* PAYMENT OVERLAY */}
+      {isPaying && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white p-6 rounded-xl text-center">
+            <h3 className="font-semibold mb-2">Waiting for payment…</h3>
+            <p className="text-sm text-slate-600">
+              Please complete payment in the popup.
+            </p>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

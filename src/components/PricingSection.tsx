@@ -64,15 +64,6 @@ export default function PricingSection() {
                   </div>
                 ))}
               </div>
-
-              <button
-                onClick={handleSubscribe}
-                className="w-full inline-flex items-center justify-center gap-2 px-8 py-4 bg-gradient-to-r from-indigo-600 to-purple-600 text-white rounded-lg font-semibold hover:from-indigo-700 hover:to-purple-700 transition-all shadow-lg hover:shadow-xl hover:scale-105 transform"
-              >
-                <Sparkles className="size-5" />
-                Subscribe Now
-              </button>
-
               <p className="text-center text-sm text-slate-500 mt-4">
                 Cancel anytime • No hidden charges • 7-day money-back guarantee
               </p>

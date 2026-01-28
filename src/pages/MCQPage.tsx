@@ -27,7 +27,7 @@ export default function MCQsPage() {
     try {
       setLoading(true);
 
-      const res = await fetch("http://127.0.0.1:8010/topic/mcqs", {
+      const res = await fetch("https://api.kalpgyanai.com/topic/mcqs", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

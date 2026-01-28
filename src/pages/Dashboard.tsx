@@ -15,14 +15,16 @@ interface User {
 
 export default function Dashboard() {
   const location = useLocation();
-  const state = location.state as { user?: User };
+  const stateUser = (location.state as { user?: User })?.user;
+  const localUser = localStorage.getItem("kg_user")
+    ? (JSON.parse(localStorage.getItem("kg_user")!) as User)
+    : null;
+  const user = stateUser || localUser;
 
   // 🔐 Safety: if user not present (refresh / direct access)
-  if (!state?.user) {
+  if (!user) {
     return <Navigate to="/" replace />;
   }
-
-  const { user } = state;
 
   const [syllabus, setSyllabus] = useState<Paper[]>([]);
   const [loading, setLoading] = useState(true);

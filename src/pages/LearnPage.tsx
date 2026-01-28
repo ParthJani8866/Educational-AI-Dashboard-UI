@@ -30,7 +30,7 @@ export default function LearnPage() {
         setError("");
 
         const res = await fetch(
-          "http://127.0.0.1:8010/topic/explain",
+          "https://api.kalpgyanai.com/topic/explain",
           {
             method: "POST",
             headers: { "Content-Type": "application/json" },
